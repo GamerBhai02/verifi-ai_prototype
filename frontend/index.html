@@ -1,0 +1,162 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Verifi-AI — Prototype (Mock)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;max-width:980px;margin:28px auto;color:#111}
+    .card{border:1px solid #e3e6ea;padding:16px;border-radius:10px;margin-bottom:12px;box-shadow:0 2px 6px rgba(25,25,25,0.03)}
+    h1{margin-bottom:6px}
+    textarea{width:100%;height:110px;padding:8px;border-radius:8px;border:1px solid #ddd;resize:vertical}
+    .btn{background:#1a73e8;color:white;padding:10px 14px;border:none;border-radius:8px;cursor:pointer;font-weight:600}
+    .small{font-size:13px;color:#666}
+    .badge{display:inline-block;padding:6px 10px;border-radius:999px;background:#f1f5f9;margin-right:8px;font-weight:600}
+    .source{font-size:13px;color:#333;margin-bottom:8px}
+    pre{background:#fbfcfe;padding:10px;border-radius:8px}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .col{flex:1;min-width:260px}
+    .muted{color:#666;font-size:13px}
+    .hint{font-size:13px;color:#666;margin-top:8px}
+    .input-opts{margin:8px 0 12px 0}
+    .example {background:#f7f9fc;border-left:4px solid #1a73e8;padding:8px;border-radius:6px;margin-bottom:8px}
+  </style>
+</head>
+<body>
+  <h1>Verifi-AI — Prototype (Mock)</h1>
+  <div class="card">
+    <div class="row">
+      <div class="col">
+        <label class="small"><strong>Input type</strong></label><br>
+        <select id="inputType">
+          <option value="text">Text</option>
+          <option value="url">URL</option>
+          <option value="image">Image (paste screenshot text)</option>
+        </select>
+
+        <div style="height:8px"></div>
+        <label class="small"><strong>Input</strong></label>
+        <textarea id="inputText" placeholder="Paste text, URL or screenshot text here..."></textarea>
+
+        <div class="input-opts">
+          <button class="btn" onclick="analyze()">Analyze</button>
+          <button style="margin-left:10px" onclick="useExample()">Use Example</button>
+        </div>
+
+        <div class="hint">Tip: click <em>Use Example</em> to load prepared test cases for the demo.</div>
+      </div>
+
+      <div class="col">
+        <div class="card">
+          <div class="muted"><strong>What the tool shows</strong></div>
+          <ul class="muted">
+            <li>Verdict + Risk score (0–100)</li>
+            <li>Short reason & manipulation type</li>
+            <li>Top evidence (title, snippet & link)</li>
+            <li>Micro-lesson (30–45s)</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <div class="muted"><strong>Sample test cases</strong></div>
+          <div class="example"><strong>Fake image (misattributed):</strong><br>“This photo shows X happening in 2024”</div>
+          <div class="example"><strong>True news (multi-source):</strong><br>National daily reports confirmed event</div>
+          <div class="example"><strong>Ambiguous / unclear:</strong><br>Out-of-context claim with no clear source</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="resultArea"></div>
+
+<script>
+/* ---------- canned responses ---------- */
+const CANNED = {
+  "fake_image": {
+    "verdict":"Likely Fake",
+    "score":86,
+    "short_reason":"Image is misattributed; original photo is from 2018 and unrelated events. Multiple fact-checks indicate mismatch.",
+    "manipulation_type":"Misattribution / Out-of-context image",
+    "top_sources":[
+      {"title":"BOOM Fact-Check: Viral image misattributed","snippet":"The image originally published in 2018 was reused to claim a 2024 event...","url":"https://www.boomlive.in/example","date":"2019-05-10"},
+      {"title":"AltNews: Context for viral claim","snippet":"This footage is older and not connected to the claim being spread...","url":"https://www.altnews.in/example","date":"2019-05-11"}
+    ],
+    "micro_lesson":"Check image origin (reverse image search), verify dates, and cross-check with reputable outlets."
+  },
+  "true_news": {
+    "verdict":"Likely Real",
+    "score":12,
+    "short_reason":"Multiple reputable outlets report same facts and official statement corroborates event.",
+    "manipulation_type":"N/A",
+    "top_sources":[
+      {"title":"The Hindu: Coverage of event","snippet":"Official statement and multiple on-ground reports confirm the event...","url":"https://www.thehindu.com/example","date":"2024-08-01"}
+    ],
+    "micro_lesson":"Cross-check across trusted outlets and prefer primary official sources."
+  },
+  "unclear": {
+    "verdict":"Unclear",
+    "score":50,
+    "short_reason":"Insufficient evidence in the available sources; no verified fact-check found.",
+    "manipulation_type":"Possible out-of-context or incomplete claim",
+    "top_sources":[
+      {"title":"No direct fact-check found","snippet":"No matching fact-check or reliable report was found for this exact claim.","url":"", "date":""}
+    ],
+    "micro_lesson":"Look for original sources, timestamps, and multiple independent confirmations before sharing."
+  }
+};
+
+/* ---------- UI logic (static) ---------- */
+
+function analyze(){
+  const type = document.getElementById('inputType').value;
+  const input = (document.getElementById('inputText').value || "").toLowerCase().trim();
+
+  // Simple heuristics to pick canned response
+  let chosen = null;
+  if(input.includes("infertility") || input.includes("fakeimage") || input.includes("misattributed") || input.includes("vaccine causes infertility")){
+    chosen = CANNED.fake_image;
+  } else if(input.includes("the hindu") || input.includes("official statement") || input.includes("confirmed by")){
+    chosen = CANNED.true_news;
+  } else if(input.length === 0) {
+    document.getElementById('resultArea').innerHTML = '<div class="card">Please paste input or click <strong>Use Example</strong>.</div>';
+    return;
+  } else {
+    chosen = CANNED.unclear;
+  }
+
+  renderResult(chosen);
+}
+
+function renderResult(r){
+  let html = '<div class="card">';
+  html += `<div><span class="badge">Verdict: ${r.verdict}</span><span class="badge">Risk: ${r.score}</span></div>`;
+  html += `<p><strong>Short reason:</strong> ${r.short_reason}</p>`;
+  html += `<p><strong>Manipulation:</strong> ${r.manipulation_type}</p>`;
+  html += '<h3>Top evidence</h3>';
+  r.top_sources.forEach(s=>{
+    html += `<div class="card source"><strong>${s.title}</strong><div style="margin-top:6px">${s.snippet}</div>`;
+    if(s.url) html += `<div style="margin-top:6px"><a href="${s.url}" target="_blank">${s.url}</a></div>`;
+    if(s.date) html += `<div style="color:#666;font-size:12px;margin-top:6px">${s.date}</div>`;
+    html += `</div>`;
+  });
+  html += `<h3>Micro-lesson</h3><p>${r.micro_lesson}</p>`;
+  html += '</div>';
+  document.getElementById('resultArea').innerHTML = html;
+}
+
+/* load examples for easy demo */
+function useExample(){
+  const examples = [
+    {type:"image", text:"This photo shows X happening in 2024. (misattributed)"},
+    {type:"text", text:"Official statement confirms event as per The Hindu and many outlets (confirmed by)"},
+    {type:"text", text:"Random forward: Vaccine causes infertility in 2024 (vaccine causes infertility)"}
+  ];
+  // rotate through examples each click
+  const idx = Math.floor(Math.random()*examples.length);
+  document.getElementById('inputType').value = examples[idx].type;
+  document.getElementById('inputText').value = examples[idx].text;
+  analyze();
+}
+</script>
+</body>
+</html>
